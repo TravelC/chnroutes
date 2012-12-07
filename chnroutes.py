@@ -121,6 +121,52 @@ def generate_mac(metric):
           "don't forget to make them executable with the chmod command.")
 
 
+def generate_mac_ipsec(_):
+    results = fetch_ip_data()
+
+    upscript_header = """\
+#!/bin/sh
+export PATH="/bin:/sbin:/usr/sbin:/usr/bin"
+
+OLDGW=`netstat -nr | grep '^default' | grep -v 'utun' | sed 's/default *\\([0-9\.]*\\) .*/\\1/'`
+echo $OLDGW
+if [ ! -e /tmp/ipsec_oldgw ]; then
+    echo "${OLDGW}" > /tmp/ipsec_oldgw
+fi
+
+dscacheutil -flushcache
+"""
+
+    downscript_header = """\
+#!/bin/sh
+export PATH="/bin:/sbin:/usr/sbin:/usr/bin"
+
+if [ ! -e /tmp/ipsec_oldgw ]; then
+        exit 0
+fi
+
+OLDGW=`cat /tmp/ipsec_oldgw`
+"""
+
+    upfile = open('phase1-up.sh', 'w')
+    downfile = open('phase1-down.sh', 'w')
+
+    upfile.write(upscript_header)
+    downfile.write(downscript_header)
+
+    for ip, _, mask in results:
+        upfile.write('route add %s/%s "${OLDGW}"\n' % (ip, mask))
+        downfile.write('route delete %s/%s ${OLDGW}\n' % (ip, mask))
+
+    downfile.write('\n\nrm /tmp/ipsec_oldgw\n')
+
+    upfile.close()
+    downfile.close()
+
+    os.chmod('phase1-up.sh', 00755)
+    os.chmod('phase1-down.sh', 00755)
+
+
 def generate_win(metric):
     results = fetch_ip_data()
 
@@ -245,12 +291,15 @@ if __name__ == '__main__':
                         nargs='?',
                         help="Target platforms, it can be openvpn, mac, linux,"
                         "win, android. openvpn by default.")
-    parser.add_argument('-m', '--metric',
-                        dest='metric',
-                        default=5,
+    parser.add_argument('-t',
+                        dest='type',
+                        default='ppp',
                         nargs='?',
-                        type=int,
-                        help="Metric setting for the route rules")
+                        choices=['ppp', 'ipsec'],
+                        help='VPN Type. ipsec for CISCO ipsec.')
+    parser.add_argument('-m', '--metric',
+                        choices=['openvpn', 'old', 'mac', 'linux', 'win'],
+                        help="target platform")
 
     args = parser.parse_args()
 
@@ -259,7 +308,12 @@ if __name__ == '__main__':
     elif args.platform.lower() == 'linux':
         generate_linux(args.metric)
     elif args.platform.lower() == 'mac':
-        generate_mac(args.metric)
+        if args.type.lower() == 'ppp':
+            generate_mac(args.metric)
+        elif args.type.lower() == 'ipsec':
+            generate_mac_ipsec(args.metric)
+        else:
+            exit(1)
     elif args.platform.lower() == 'win':
         generate_win(args.metric)
     elif args.platform.lower() == 'android':
