@@ -9,6 +9,7 @@ import sys
 import argparse
 import math
 import textwrap
+import os
 
 
 def generate_ovpn(metric):
@@ -163,8 +164,8 @@ OLDGW=`cat /tmp/ipsec_oldgw`
     upfile.close()
     downfile.close()
 
-    os.chmod('phase1-up.sh', 00755)
-    os.chmod('phase1-down.sh', 00755)
+    os.chmod('phase1-up.sh', 0o755)
+    os.chmod('phase1-down.sh', 0o755)
 
 
 def generate_win(metric):
